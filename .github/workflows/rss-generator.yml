@@ -23,25 +23,26 @@ jobs:
 
           BASE_URL = "https://www.jst.go.jp/program/india/call"
           TOP_URL = BASE_URL + "/"
+          now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))  # JST
           r = requests.get(TOP_URL, timeout=20)
           r.encoding = r.apparent_encoding
           soup = BeautifulSoup(r.text, "lxml")
 
           items = []
 
-          # 1. 最新公募PDFリンク（1件だけ）
+          # 最新公募PDFリンク
           a_tag = soup.select_one('p.mB40 > a')
           if a_tag:
               title = a_tag.get_text(strip=True)
               link = a_tag['href']
               if not link.startswith("http"):
                   link = BASE_URL + "/" + link.lstrip("./")
-              pub = email.utils.format_datetime(datetime.datetime.utcnow())
+              pub = email.utils.format_datetime(now)
               items.append(
-                  f"<item><title>{html.escape(title)}</title><link>{link}</link><pubDate>{pub}</pubDate></item>"
+                  f"<item><title>{html.escape(title)}</title><link>{link}</link><guid>{link}</guid><pubDate>{pub}</pubDate></item>"
               )
 
-          # 2. 過去年度リンク
+          # 過去の公募情報
           for li in soup.select('h2:contains("過去の公募情報") + ul li'):
               a = li.find('a')
               if a:
@@ -49,10 +50,13 @@ jobs:
                   link = a['href']
                   if not link.startswith("http"):
                       link = BASE_URL + "/" + link.lstrip("./")
-                  pub = email.utils.format_datetime(datetime.datetime.utcnow())
+                  pub = email.utils.format_datetime(now)
                   items.append(
-                      f"<item><title>{html.escape(title)}</title><link>{link}</link><pubDate>{pub}</pubDate></item>"
+                      f"<item><title>{html.escape(title)}</title><link>{link}</link><guid>{link}</guid><pubDate>{pub}</pubDate></item>"
                   )
+
+          # チャンネル最終更新日
+          last_build = email.utils.format_datetime(now)
 
           rss = (
               '<?xml version="1.0" encoding="UTF-8"?>'
@@ -60,6 +64,7 @@ jobs:
               '<title>JSTインド公募 新着情報</title>'
               f'<link>{TOP_URL}</link>'
               '<description>JSTインド若手科学頭脳循環プログラム公募情報RSS</description>'
+              f'<lastBuildDate>{last_build}</lastBuildDate>'
               + "".join(items) +
               '</channel></rss>'
           )
