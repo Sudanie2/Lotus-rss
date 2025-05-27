@@ -2,7 +2,7 @@ name: Generate JST Lotus RSS Feed
 
 on:
   schedule:
-    - cron: '10 1 * * *'      # JST 10:10毎日
+    - cron: '10 1 * * *'
   workflow_dispatch:
 
 jobs:
@@ -27,54 +27,39 @@ jobs:
           r.encoding = r.apparent_encoding
           soup = BeautifulSoup(r.text, "lxml")
 
-          # ul, ol で公募情報が並ぶ最初のリストを探す（class有無に関わらず）
-          news_ul = soup.select_one("ul, ol")
-          print("[DEBUG] news_ul:", news_ul)
-          if not news_ul:
-              print("ERROR: 新着情報リストが見つかりません")
-              exit(1)
-
-          lis = news_ul.find_all("li")
-          print(f"[DEBUG] li数: {len(lis)}")
-
           items = []
-          for li in lis:
-              # 日付取得（span.date, span, またはli直下テキストから）
-              date_span = li.find("span", class_="date") or li.find("span")
-              date_txt = date_span.get_text(strip=True) if date_span else ""
-              dt = None
-              for fmt in ("%Y/%m/%d", "%Y-%m-%d", "%Y.%m.%d"):
-                  try:
-                      dt = datetime.datetime.strptime(date_txt, fmt)
-                      break
-                  except:
-                      continue
-              if not dt:
-                  dt = datetime.datetime.utcnow()
-              pub = email.utils.format_datetime(dt)
 
-              # タイトル・リンク
-              a = li.find("a")
-              if a:
-                  title = a.get_text(strip=True)
-                  link = a["href"]
-                  if link and not link.startswith("http"):
-                      link = BASE_URL + "/" + link.lstrip("./")
-              else:
-                  # aタグが無い場合はliテキスト全体をタイトルとしてTOPページをリンク
-                  title = li.get_text(strip=True)
-                  link = TOP_URL
-
+          # 1. 最新公募PDFリンク（1件だけ）
+          a_tag = soup.select_one('p.mB40 > a')
+          if a_tag:
+              title = a_tag.get_text(strip=True)
+              link = a_tag['href']
+              if not link.startswith("http"):
+                  link = BASE_URL + "/" + link.lstrip("./")
+              pub = email.utils.format_datetime(datetime.datetime.utcnow())
               items.append(
                   f"<item><title>{html.escape(title)}</title><link>{link}</link><pubDate>{pub}</pubDate></item>"
               )
+
+          # 2. 過去年度リンク
+          for li in soup.select('h2:contains("過去の公募情報") + ul li'):
+              a = li.find('a')
+              if a:
+                  title = a.get_text(strip=True)
+                  link = a['href']
+                  if not link.startswith("http"):
+                      link = BASE_URL + "/" + link.lstrip("./")
+                  pub = email.utils.format_datetime(datetime.datetime.utcnow())
+                  items.append(
+                      f"<item><title>{html.escape(title)}</title><link>{link}</link><pubDate>{pub}</pubDate></item>"
+                  )
 
           rss = (
               '<?xml version="1.0" encoding="UTF-8"?>'
               '<rss version="2.0"><channel>'
               '<title>JSTインド公募 新着情報</title>'
               f'<link>{TOP_URL}</link>'
-              '<description>JSTインド公募ページの新着RSS</description>'
+              '<description>JSTインド若手科学頭脳循環プログラム公募情報RSS</description>'
               + "".join(items) +
               '</channel></rss>'
           )
